@@ -1,0 +1,5 @@
+train: ../images/train  # path to training images
+val: ../images/val      # path to validation images
+
+nc: 2                           # number of classes
+names: ['shieldedCastle', 'unshieldedCastle']           # class names

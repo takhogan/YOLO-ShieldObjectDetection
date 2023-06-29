@@ -1,0 +1,13 @@
+all_images/*
+figs/*
+images/*
+labels/*
+runs/*
+venv/*
+videos/*
+yolov5/
+.DS_Store
+.idea/
+export-result.ndjson
+yolov5m.pt
+yolov8m.pt
