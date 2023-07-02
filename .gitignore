@@ -1,7 +1,7 @@
 all_images/*
 figs/*
-images/*
-labels/*
+datasets/images/*
+datasets/labels/*
 runs/*
 venv/*
 videos/*
@@ -11,3 +11,5 @@ yolov5/
 export-result.ndjson
 yolov5m.pt
 yolov8m.pt
+credentials.json
+global_keys.json

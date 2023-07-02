@@ -9,7 +9,6 @@ import random
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import sys
-sys.path.append('./JSON2YOLO-master')
 
 # function to download video
 def download_video(url, filename):
@@ -64,9 +63,9 @@ def extract_frames(video_file, output_dir):
     print(f"Saved {image_counter} images from video file {video_file}")
 
 
-def process_file(filename):
-    os.makedirs('labels', exist_ok=True)
-    os.makedirs('images', exist_ok=True)
+def process_video_file(filename):
+    os.makedirs('datasets/labels', exist_ok=True)
+    os.makedirs('datasets/images', exist_ok=True)
 
     with open(filename) as f:
         data = ndjson.load(f)
@@ -106,23 +105,33 @@ def process_file(filename):
                                 w = bbox['width']
                                 h = bbox['height']
                                 bb = coord_convert((width, height), (x, x + w, y, y + h))
-                                f.write('0 ' + ' '.join(map(str, bb)) + '\n')
+                                classification = '0' if obj['name'] == 'shieldedCastle' else '1'
+                                f.write(classification + ' ' + ' '.join(map(str, bb)) + '\n')
 
 
-def deprocess_file():
+def deprocess_file(images_dir, labels_dir):
     # List all files in the image folder
-    image_files = sorted(file for file in os.listdir('images') if not file.startswith('.DS_Store'))
-    label_files = sorted(file for file in os.listdir('labels') if not file.startswith('.DS_Store'))
+    image_files = sorted(file for file in os.listdir(images_dir) if not file.startswith('.DS_Store'))
+    label_files = sorted(file for file in os.listdir(labels_dir) if not file.startswith('.DS_Store'))
     os.makedirs('figs', exist_ok=True)
-    # Iterate over the image and corresponding label files
-    for img_file, lbl_file in zip(image_files, label_files):
+
+    # Create a dictionary to match image and label files by their base names
+    image_dict = {os.path.splitext(file)[0]: file for file in image_files}
+    label_dict = {os.path.splitext(file)[0]: file for file in label_files}
+
+    # Iterate over the common base names
+    for common_name in set(image_dict.keys()).intersection(label_dict.keys()):
+        # Get the image and label file paths
+        img_file = image_dict[common_name]
+        lbl_file = label_dict[common_name]
+
         # Read the image file
         print(img_file, lbl_file)
-        img = cv2.imread(os.path.join('images', img_file))
+        img = cv2.imread(os.path.join(images_dir, img_file))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Convert to RGB for matplotlib
 
         # Read the label file
-        with open(os.path.join('labels', lbl_file), 'r') as f:
+        with open(os.path.join(labels_dir, lbl_file), 'r') as f:
             bboxes = f.readlines()
 
         # Create figure and axes
@@ -132,7 +141,6 @@ def deprocess_file():
         ax.imshow(img)
 
         # for each bounding box
-
         for bbox in bboxes:
             # Each bbox is in format: class x_center y_center width height
             parts = bbox.strip().split()
@@ -143,7 +151,7 @@ def deprocess_file():
                                                 img.shape[1], parts[4] * img.shape[0]
             # Create a Rectangle patch
             rect = patches.Rectangle((x_center - width / 2, y_center - height / 2), width, height, linewidth=1,
-                                     edgecolor='r', facecolor='none')
+                                     edgecolor='b' if parts[0] == '0' else 'r', facecolor='none')
 
             # Add the patch to the Axes
             ax.add_patch(rect)
@@ -152,16 +160,15 @@ def deprocess_file():
         plt.close()
 
 
-import os
-import shutil
-import random
+
+
 
 def split_data(image_dir, label_dir, dataset_dir, val_percent=0.1):
     # Ensure the train and val directories exist
-    os.makedirs(os.path.join(dataset_dir, 'images', 'train'), exist_ok=True)
-    os.makedirs(os.path.join(dataset_dir, 'images', 'val'), exist_ok=True)
-    os.makedirs(os.path.join(dataset_dir, 'labels', 'train'), exist_ok=True)
-    os.makedirs(os.path.join(dataset_dir, 'labels', 'val'), exist_ok=True)
+    os.makedirs(os.path.join(dataset_dir, 'datasets/images', 'train'), exist_ok=True)
+    os.makedirs(os.path.join(dataset_dir, 'datasets/images', 'val'), exist_ok=True)
+    os.makedirs(os.path.join(dataset_dir, 'datasets/labels', 'train'), exist_ok=True)
+    os.makedirs(os.path.join(dataset_dir, 'datasets/labels', 'val'), exist_ok=True)
 
     # Get a list of all image files
     images = [f for f in os.listdir(image_dir) if f.endswith('.jpg') or f.endswith('.png')]
@@ -183,17 +190,18 @@ def split_data(image_dir, label_dir, dataset_dir, val_percent=0.1):
         label_file = image_file.rsplit('.', 1)[0] + '.txt'
 
         # Move the image and label files to the target directory
-        shutil.move(os.path.join(image_dir, image_file), os.path.join(dataset_dir, 'images', target_dir, image_file))
-        shutil.move(os.path.join(label_dir, label_file), os.path.join(dataset_dir, 'labels', target_dir, label_file))
+        shutil.move(os.path.join(image_dir, image_file), os.path.join(dataset_dir, 'datasets/images', target_dir, image_file))
+        shutil.move(os.path.join(label_dir, label_file), os.path.join(dataset_dir, 'datasets/labels', target_dir, label_file))
 
 
 
 
-process_file('export-result.ndjson')
-print('finished processing')
-deprocess_file()
+# process_video_file('export-result.ndjson')
+# print('finished processing')
+# deprocess_file('datasets/images', 'datasets/labels')
+#
+# split_data('datasets/images', 'datasets/labels', '.')
 
-split_data('./images', './labels', '.')
-
+# deprocess_file('all_images', 'runs/detect/predict2/labels')
 
 

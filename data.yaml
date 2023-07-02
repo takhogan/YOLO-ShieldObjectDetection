@@ -1,5 +1,5 @@
-train: ../images/train  # path to training images
-val: ../images/val      # path to validation images
+train: /Users/takhogan/PycharmProjects/YOLO-ShieldObjectDetection/datasets/images/train  # path to training images
+val: /Users/takhogan/PycharmProjects/YOLO-ShieldObjectDetection/datasets/images/val      # path to validation images
 
 nc: 2                           # number of classes
 names: ['shieldedCastle', 'unshieldedCastle']           # class names
