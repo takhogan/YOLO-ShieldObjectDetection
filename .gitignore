@@ -3,6 +3,7 @@ figs/*
 datasets/images/*
 datasets/labels/*
 runs/*
+!runs/detect/train7/
 venv/*
 videos/*
 yolov5/
@@ -16,4 +17,3 @@ credentials.json
 global_keys.json
 dataset_1.zip
 __pycache__/
-!runs/detect/train7/
