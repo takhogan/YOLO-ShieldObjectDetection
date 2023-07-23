@@ -5,10 +5,13 @@ import requests
 import os
 import shutil
 import random
+import glob
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import sys
+
+from utils import *
 
 # function to download video
 def download_video(url, filename):
@@ -18,6 +21,17 @@ def download_video(url, filename):
         for chunk in r.iter_content(chunk_size=1024*1024):
             if chunk:
                 f.write(chunk)
+
+def download_image(url, filepath):
+    response = requests.get(url, stream=True)
+
+    # Check if the request was successful
+    if response.status_code == 200:
+        # Open the file in binary mode and write the response content to it
+        with open(filepath, 'wb') as file:
+            file.write(response.content)
+    else:
+        print(f"Unable to download image. HTTP response code: {response.status_code}")
 
 
 # function to convert coordinates
@@ -36,34 +50,10 @@ def coord_convert(size, box):
 
 
 
-def extract_frames(video_file, output_dir):
-    # Make sure the output directory exists
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Open the video file
-    vidcap = cv2.VideoCapture(video_file)
-
-    image_counter = 0
-
-    while vidcap.isOpened():
-        # Read a frame from the video
-        success, image = vidcap.read()
-
-        if success:
-            # Write the image to a file
-            cv2.imwrite(os.path.join(output_dir, f'frame{image_counter}.jpg'), image)
-            image_counter += 1
-        else:
-            # If we didn't successfully read a frame, we're probably at the end of the video
-            break
-
-    # Release the video capture
-    vidcap.release()
-
-    print(f"Saved {image_counter} images from video file {video_file}")
 
 
-def process_video_file(filename):
+
+def process_file(filename, filetype):
     os.makedirs('datasets/labels', exist_ok=True)
     os.makedirs('datasets/images', exist_ok=True)
 
@@ -71,42 +61,67 @@ def process_video_file(filename):
         data = ndjson.load(f)
 
     for item in data:
-        video_url = item['data_row']['row_data']
-        video_file = 'videos/' + item['data_row']['external_id']
-        download_video(video_url, video_file)
-        vidcap = cv2.VideoCapture(video_file)
-        extract_frames(video_file, 'all_images')
-        width = vidcap.get(cv2.CAP_PROP_FRAME_WIDTH)
-        height = vidcap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        file_url = item['data_row']['row_data']
+        if filetype == 'video':
+            video_file = 'videos/' + item['data_row']['external_id']
+            download_video(file_url, video_file)
+            vidcap = cv2.VideoCapture(video_file)
+            width = vidcap.get(cv2.CAP_PROP_FRAME_WIDTH)
+            height = vidcap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        elif filetype == 'image':
+            image_filename = item['data_row']['id'] + '_' + os.path.basename(item['data_row']['external_id'])
+            image_file = 'datasets/images/' + image_filename
+            download_image(file_url, image_file)  # assuming download_image is implemented
+            print(image_file)
+            width = item['media_attributes']['width']
+            height = item['media_attributes']['height']
+
+
+
 
         for project in item['projects'].values():
             for label in project['labels']:
                 annotations = label['annotations']
-                frames = annotations['frames']
-                # segments = annotations.get('segments', {})
 
-                # Process frames
-                for frame_number, frame_annotations in frames.items():
-                    print('Frame number:', frame_number)
-                    frame_number = str(int(frame_number) - 1)
-                    vidcap.set(cv2.CAP_PROP_POS_FRAMES, int(frame_number))
-                    success, image = vidcap.read()
+                if filetype == 'video':
+                    # Process frames
+                    frames = annotations['frames']
+                    for frame_number, frame_annotations in frames.items():
+                        print('Frame number:', frame_number)
+                        frame_number = str(int(frame_number) - 1)
+                        vidcap.set(cv2.CAP_PROP_POS_FRAMES, int(frame_number))
+                        success, image = vidcap.read()
 
-                    if success:
-                        image_file = 'images/' + item['data_row']['id'] + '_' + frame_number + '.jpg'
-                        cv2.imwrite(image_file, image)
+                        if success:
+                            image_file = 'datasets/images/' + item['data_row']['id'] + '_' + frame_number + '.jpg'
+                            cv2.imwrite(image_file, image)
 
-                        txt_file = 'labels/' + item['data_row']['id'] + '_' + frame_number + '.txt'
-                        with open(txt_file, 'w') as f:
-                            for obj_id, obj in frame_annotations['objects'].items():
-                                bbox = obj['bounding_box']
-                                x = bbox['left']
-                                y = bbox['top']
-                                w = bbox['width']
-                                h = bbox['height']
-                                bb = coord_convert((width, height), (x, x + w, y, y + h))
-                                classification = '0' if obj['name'] == 'shieldedCastle' else '1'
-                                f.write(classification + ' ' + ' '.join(map(str, bb)) + '\n')
+                            txt_file = 'datasets/labels/' + item['data_row']['id'] + '_' + frame_number + '.txt'
+                            with open(txt_file, 'w') as f:
+                                for obj_id, obj in frame_annotations['objects'].items():
+                                    bbox = obj['bounding_box']
+                                    x = bbox['left']
+                                    y = bbox['top']
+                                    w = bbox['width']
+                                    h = bbox['height']
+                                    bb = coord_convert((width, height), (x, x + w, y, y + h))
+                                    classification = '0' if obj['name'] == 'shieldedCastle' else '1'
+                                    f.write(classification + ' ' + ' '.join(map(str, bb)) + '\n')
+                elif filetype == 'image':
+                    # Process objects
+                    label_filename = image_filename.rsplit('.', 1)[0] + '.txt'
+                    label_file = 'datasets/labels/' + label_filename
+                    with open(label_file, 'w') as f:
+                        for obj in annotations['objects']:
+                            obj_id = obj['feature_id']
+                            bbox = obj['bounding_box']
+                            x = bbox['left']
+                            y = bbox['top']
+                            w = bbox['width']
+                            h = bbox['height']
+                            bb = coord_convert((width, height), (x, x + w, y, y + h))
+                            classification = '0' if obj['name'] == 'shieldedCastle' else '1'
+                            f.write(classification + ' ' + ' '.join(map(str, bb)) + '\n')
 
 
 def deprocess_file(images_dir, labels_dir):
@@ -151,7 +166,7 @@ def deprocess_file(images_dir, labels_dir):
                                                 img.shape[1], parts[4] * img.shape[0]
             # Create a Rectangle patch
             rect = patches.Rectangle((x_center - width / 2, y_center - height / 2), width, height, linewidth=1,
-                                     edgecolor='b' if parts[0] == '0' else 'r', facecolor='none')
+                                     edgecolor='b' if int(parts[0]) == 0 else 'r', facecolor='none')
 
             # Add the patch to the Axes
             ax.add_patch(rect)
@@ -195,13 +210,13 @@ def split_data(image_dir, label_dir, dataset_dir, val_percent=0.1):
 
 
 
-
-# process_video_file('export-result.ndjson')
-# print('finished processing')
-# deprocess_file('datasets/images', 'datasets/labels')
-#
-# split_data('datasets/images', 'datasets/labels', '.')
-
-# deprocess_file('all_images', 'runs/detect/predict2/labels')
-
+if __name__=='__main__':
+    # process_file('export-result.ndjson', 'video')
+    if len(glob.glob('datasets/images/*.jpg')):
+        print('Warning: images found in image folder, reccomended to keep folder empty')
+    process_file('export-result-img.ndjson', 'image')
+    print('finished processing')
+    split_data('datasets/images', 'datasets/labels', '.')
+    deprocess_file('datasets/images/train', 'datasets/labels/train')
+    deprocess_file('datasets/images/val', 'datasets/labels/val')
 
